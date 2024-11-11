@@ -3,6 +3,7 @@ from . import surface_point_cloud
 from .surface_point_cloud import BadMeshException
 from .utils import scale_to_unit_cube, scale_to_unit_sphere, get_raster_points, check_voxels
 import trimesh
+import open3d as o3d
 
 def get_surface_point_cloud(mesh, surface_point_method='scan', bounding_radius=None, scan_count=100, scan_resolution=400, sample_point_count=10000000, calculate_normals=True):
     if isinstance(mesh, trimesh.Scene):
@@ -20,6 +21,35 @@ def get_surface_point_cloud(mesh, surface_point_method='scan', bounding_radius=N
     else:
         raise ValueError('Unknown surface point sampling method: {:s}'.format(surface_point_method))
 
+def o3d_to_trimesh(o3d_mesh):
+   vertices = np.asarray(o3d_mesh.vertices)
+   faces = np.asarray(o3d_mesh.triangles)
+   return trimesh.Trimesh(vertices=vertices, faces=faces)
+
+def get_surface_point_cloud_fast(mesh_path, surface_point_method='scan', bounding_radius=None, scan_count=100, scan_resolution=400, sample_point_count=10000000, calculate_normals=True):
+    mesh_scene = o3d.io.read_triangle_mesh(mesh_path)
+    if isinstance(mesh_scene, o3d.t.geometry.TriangleMesh) or isinstance(mesh_scene, o3d.geometry.TriangleMesh):
+        mesh = mesh_scene
+
+    elif isinstance(mesh_scene, dict):
+        mesh = list(mesh_scene.values())[0] 
+        for geometry in list(mesh_scene.values())[1:]:
+            mesh += geometry
+
+    mesh = o3d_to_trimesh(mesh)
+
+    if not isinstance(mesh, trimesh.Trimesh):
+        raise TypeError("The mesh parameter must be a trimesh mesh.")
+
+    if bounding_radius is None:
+        bounding_radius = np.max(np.linalg.norm(mesh.vertices, axis=1)) * 1.1
+        
+    if surface_point_method == 'scan':
+        return surface_point_cloud.create_from_scans(mesh, bounding_radius=bounding_radius, scan_count=scan_count, scan_resolution=scan_resolution, calculate_normals=calculate_normals)
+    elif surface_point_method == 'sample':
+        return surface_point_cloud.sample_from_mesh(mesh, sample_point_count=sample_point_count, calculate_normals=calculate_normals)        
+    else:
+        raise ValueError('Unknown surface point sampling method: {:s}'.format(surface_point_method))
 
 def mesh_to_sdf(mesh, query_points, surface_point_method='scan', sign_method='normal', bounding_radius=None, scan_count=100, scan_resolution=400, sample_point_count=10000000, normal_sample_count=11):
     if not isinstance(query_points, np.ndarray):
