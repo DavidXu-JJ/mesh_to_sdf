@@ -63,6 +63,33 @@ class SurfacePointCloud:
         else:
             return distances
 
+    def get_udf(self, query_points, use_depth_buffer=False, sample_count=11, return_gradients=False):
+        if use_depth_buffer:
+            distances, indices = self.kd_tree.query(query_points)
+            distances = distances.astype(np.float32).reshape(-1)
+
+            if return_gradients:
+                gradients = query_points - self.points[indices[:, 0]]
+
+        else:
+            distances, indices = self.kd_tree.query(query_points, k=sample_count)
+            distances = distances.astype(np.float32)
+
+            closest_points = self.points[indices]
+            direction_from_surface = query_points[:, np.newaxis, :] - closest_points
+            distances = distances[:, 0]
+
+            if return_gradients:
+                gradients = direction_from_surface[:, 0]
+
+        if return_gradients:
+            near_surface = np.abs(distances) < math.sqrt(0.0025**2 * 3) * 3 # 3D 2-norm stdev * 3
+            gradients = np.where(near_surface[:, np.newaxis], self.normals[indices[:, 0]], gradients)
+            gradients /= np.linalg.norm(gradients, axis=1)[:, np.newaxis]
+            return distances, gradients
+        else:
+            return distances
+
     def get_sdf_in_batches(self, query_points, use_depth_buffer=False, sample_count=11, batch_size=1000000, return_gradients=False):
         if query_points.shape[0] <= batch_size:
             return self.get_sdf(query_points, use_depth_buffer=use_depth_buffer, sample_count=sample_count, return_gradients=return_gradients)
@@ -70,6 +97,22 @@ class SurfacePointCloud:
         n_batches = int(math.ceil(query_points.shape[0] / batch_size))
         batches = [
             self.get_sdf(points, use_depth_buffer=use_depth_buffer, sample_count=sample_count, return_gradients=return_gradients)
+            for points in np.array_split(query_points, n_batches)
+        ]
+        if return_gradients:
+            distances = np.concatenate([batch[0] for batch in batches])
+            gradients = np.concatenate([batch[1] for batch in batches])
+            return distances, gradients
+        else:
+            return np.concatenate(batches) # distances
+
+    def get_udf_in_batches(self, query_points, use_depth_buffer=False, sample_count=11, batch_size=1000000, return_gradients=False):
+        if query_points.shape[0] <= batch_size:
+            return self.get_udf(query_points, use_depth_buffer=use_depth_buffer, sample_count=sample_count, return_gradients=return_gradients)
+
+        n_batches = int(math.ceil(query_points.shape[0] / batch_size))
+        batches = [
+            self.get_udf(points, use_depth_buffer=use_depth_buffer, sample_count=sample_count, return_gradients=return_gradients)
             for points in np.array_split(query_points, n_batches)
         ]
         if return_gradients:
