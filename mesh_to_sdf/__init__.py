@@ -80,7 +80,7 @@ def mesh_to_udf(mesh, query_points, surface_point_method='scan', sign_method='no
         print("Incompatible methods for sampling points and determining sign, using sign_method='normal' instead.")
         sign_method = 'normal'
 
-    point_cloud = get_surface_point_cloud(mesh, surface_point_method, bounding_radius, scan_count, scan_resolution, sample_point_count, calculate_normals=sign_method=='normal')
+    point_cloud = get_surface_point_cloud_fast(mesh, surface_point_method, bounding_radius, scan_count, scan_resolution, sample_point_count, calculate_normals=sign_method=='normal')
 
     if sign_method == 'normal':
         return point_cloud.get_udf_in_batches(query_points, use_depth_buffer=False)
