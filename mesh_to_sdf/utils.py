@@ -21,6 +21,44 @@ def scale_to_unit_cube(mesh):
 
     return trimesh.Trimesh(vertices=vertices, faces=mesh.faces)
 
+def forward_scale_to_unit_cube(mesh):
+    # If the input is a Scene, merge it into a single mesh
+    if isinstance(mesh, trimesh.Scene):
+        mesh = mesh.dump().sum()
+
+    # Compute the translation and scale factors
+    centroid = mesh.bounding_box.centroid
+    extents = mesh.bounding_box.extents
+    scale = 2 / np.max(extents)
+
+    # Translate and scale vertices
+    vertices = mesh.vertices - centroid
+    vertices *= scale
+
+    # Return the transformed mesh and the inverse transformation parameters
+    transformed_mesh = trimesh.Trimesh(vertices=vertices, faces=mesh.faces)
+    inverse_params = {
+        'centroid': centroid,
+        'scale': scale,
+    }
+    return transformed_mesh, inverse_params
+
+def reverse_vertices(original_vertices, inverse_params):
+    vertices = original_vertices / scale
+    vertices += centroid
+    return vertices
+
+def reverse_scale_to_unit_cube(mesh, inverse_params):
+    # Extract the inverse transformation parameters
+    centroid = inverse_params['centroid']
+    scale = inverse_params['scale']
+
+    # Reverse the scaling and translation
+    vertices = reverse_vertices(mesh.vertices, inverse_params)
+
+    # Return the restored mesh
+    return trimesh.Trimesh(vertices=vertices, faces=mesh.faces)
+
 # Use get_raster_points.cache_clear() to clear the cache
 @functools.lru_cache(maxsize=4)
 def get_raster_points(voxel_resolution):
